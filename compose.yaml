@@ -1,0 +1,61 @@
+version: '2.4'
+
+x-app:
+  &app
+  build:
+    context: .dockerdev
+    dockerfile: Dockerfile
+    args:
+      RUBY_VERSION: '3.2.2'
+      PG_MAJOR: '16'
+  image: reproduce_bug:0.1.0
+  environment:
+    &env
+    RAILS_ENV: ${RAILS_ENV:-development}
+  tmpfs:
+    - /tmp
+    - /app/tmp/pids
+
+x-backend:
+  &backend
+  <<: *app
+  stdin_open: true
+  tty: true
+  volumes:
+    - .:/app:cached
+    - bundle:/usr/local/bundle
+    - rails_cache:/app/tmp/cache
+    - assets_builds:/app/assets/builds
+    - .dockerdev/.psqlrc:/root/.psqlrc:ro
+    - .dockerdev/.bashrc:/root/.bashrc:ro
+    - .dockerdev/.irbrc:/root/.irbrc:ro
+  environment:
+    &backend_environment
+    <<: *env
+    RUBY_YJIT_ENABLE: 1
+    MALLOC_ARENA_MAX: 2
+    WEB_CONCURRENCY: ${WEB_CONCURRENCY:-1}
+    BOOTSNAP_CACHE_DIR: /usr/local/bundle/_bootsnap
+    XDG_DATA_HOME: /app/tmp/caches
+    BINDING: 0.0.0.0
+    HISTFILE: /usr/local/hist/.bash_history
+    PSQL_HISTFILE: /usr/local/hist/.psql_history
+    IRB_HISTFILE: /usr/local/hst/.irb_history
+    EDITOR: vi
+
+services:
+  rails:
+    <<: *backend
+    command: bundle exec rails
+
+  web:
+    <<: *backend
+    command: rails s
+    ports:
+      - '3000:3000'
+      - '35729:35729'
+
+volumes:
+  bundle:
+  assets_builds:
+  rails_cache:
